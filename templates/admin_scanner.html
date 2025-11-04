@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Escáner QR de Asistencia</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: 'Inter', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start; 
+            align-items: center;
+            min-height: 100vh;
+            padding-top: 20px;
+        }
+        .container {
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+        }
+        h2 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        #reader {
+            width: 100%;
+            min-height: 300px;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            overflow: hidden;
+            background-color: #eee;
+        }
+        .result-box {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: left;
+            font-weight: bold;
+        }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .warning { background-color: #fffff0; color: #856404; border: 1px solid #ffeeba; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .btn-back {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Cámara Escáner de Asistencia</h2>
+        <p>Apunta la cámara al Código QR del empleado.</p>
+        
+        <div id="reader"></div>
+
+        <div id="result-message" class="result-box warning">
+            Cargando el escáner y solicitando acceso a la cámara...
+        </div>
+
+        <a href="{{ url_for('admin_dashboard') }}" class="btn-back">Volver al Panel Admin</a>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.2.5/html5-qrcode.min.js"></script>
+
+    <script>
+        const qrCodeRegionId = "reader";
+        const resultMessage = document.getElementById('result-message');
+        let html5QrcodeScanner = null;
+
+        function updateMessage(status, message) {
+            resultMessage.style.display = 'block';
+            resultMessage.className = `result-box ${status}`;
+            resultMessage.textContent = message;
+
+            if (status === 'success' || status === 'error') {
+                setTimeout(() => {
+                    updateMessage('warning', 'Listo para escanear. Apunta al Código QR...');
+                }, 5000);
+            }
+        }
+
+        // --- Lógica de Escaneo ---
+        function onScanSuccess(decodedText, decodedResult) {
+            // Pausa el escáner
+            if (html5QrcodeScanner) {
+                 html5QrcodeScanner.pause(true); 
+            }
+           
+
+            updateMessage('warning', `Código detectado. Procesando asistencia...`);
+
+            // Realiza la solicitud al endpoint de check-in del servidor Flask
+            fetch(decodedText, {
+                method: 'GET',
+                headers: {
+                    // Header recomendado para asegurar que el navegador acepte la respuesta HTML
+                    'Accept': 'text/html' 
+                }
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Error HTTP: ${response.status}`);
+                    }
+                    return response.text();
+                })
+                .then(html => {
+                    // Procesar la respuesta HTML del servidor para extraer el mensaje de estado
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    
+                    const statusText = doc.querySelector('h2')?.textContent?.trim() || "Error";
+                    const messageText = doc.querySelector('p')?.textContent?.trim() || "No se pudo obtener el mensaje de la respuesta.";
+                    
+                    let status = 'error';
+
+                    if (statusText.includes('Exitoso')) {
+                        status = 'success';
+                    } else if (statusText.includes('Registrado')) {
+                        status = 'warning';
+                    }
+
+                    updateMessage(status, messageText);
+                })
+                .catch(error => {
+                    updateMessage('error', `Error de red o servidor al registrar: ${error.message}`);
+                })
+                .finally(() => {
+                    // Después de un breve retraso, reanuda el escáner
+                    setTimeout(() => {
+                         if (html5QrcodeScanner) {
+                            html5QrcodeScanner.resume(true); 
+                        }
+                    }, 2000); 
+                });
+        }
+
+        function onScanFailure(error) {
+            // Se deja vacío
+        }
+
+        // --- Lógica de Inicialización de la Cámara ---
+        function startScanner() {
+            // Revisar si estamos en un contexto seguro
+            if (!window.isSecureContext && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
+                 updateMessage('error', '❌ ERROR: La cámara solo funciona bajo HTTPS o en localhost.');
+                 return; 
+            }
+            
+            // Comprobación final si la clase existe antes de intentar iniciar
+            if (typeof Html5QrcodeScanner === 'undefined') {
+                updateMessage('error', '❌ ERROR FATAL: La librería no se cargó. Esto es un bloqueo de red.');
+                return;
+            }
+
+            updateMessage('warning', 'Inicializando escáner...');
+
+            html5QrcodeScanner = new Html5QrcodeScanner(
+                qrCodeRegionId, 
+                { 
+                    fps: 10, 
+                    qrbox: {width: 250, height: 250},
+                    facingMode: "environment", 
+                    supportedScanTypes: [Html5QrcodeSupportedFormats.QR_CODE]
+                },
+                /* verbose= */ false
+            );
+            
+            html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+
+            // Intento explícito de obtener permisos de la cámara (para manejo de errores)
+             navigator.mediaDevices.getUserMedia({ video: true })
+                .catch(err => {
+                    if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+                        updateMessage('error', '❌ Permiso Denegado: Debes permitir el acceso a la cámara.');
+                    } else if (err.name === "NotFoundError") {
+                        updateMessage('error', '❌ Cámara no encontrada.');
+                    } else {
+                        updateMessage('error', `❌ Error desconocido al iniciar: ${err.name}.`);
+                    }
+                });
+            
+        }
+        
+        // 🌟 CORRECCIÓN FINAL: Se inicia la lógica tan pronto como el DOM esté listo.
+        document.addEventListener('DOMContentLoaded', function() {
+            // Un pequeño retraso para asegurar que el script de CDN se procese
+            setTimeout(startScanner, 100); 
+        });
+
+    </script>
+</body>
+</html>

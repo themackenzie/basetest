@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+
+{% block title %}Registrar Nuevo Usuario{% endblock %}
+
+{% block content %}
+    <div style="max-width: 300px; margin: 0 auto; padding: 20px; border: 1px solid #ccc; border-radius: 5px; text-align: center;">
+        <h2>Registrar Nuevo Usuario</h2>
+        <p style="font-size: 0.9em; color: #555;">(Usuarios normales, no administradores)</p>
+        
+        <form method="POST" style="display: flex; flex-direction: column; gap: 10px;">
+            <label for="username" style="text-align: left;">Usuario:</label>
+            <input type="text" id="username" name="username" required style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+            
+            <label for="password" style="text-align: left;">Contraseña:</label>
+            <input type="password" id="password" name="password" required style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+            
+            <button type="submit" style="padding: 10px; background-color: #2ecc71; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px;">Registrar</button>
+        </form>
+        
+        {% if error %}
+            <p class="error">{{ error }}</p>
+        {% endif %}
+        
+        <p style="margin-top: 20px;">¿Ya tienes una cuenta? <a href="{{ url_for('login') }}" style="color: #3498db;">Inicia Sesión</a></p>
+    </div>
+{% endblock %}

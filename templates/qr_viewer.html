@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+
+{% block title %}Código QR{% endblock %}
+
+{% block content %}
+    <div style="text-align: center; padding: 20px;">
+        <h2>Tu Código QR de Asistencia Único y Permanente</h2>
+        <p>Muestra este código para registrar tu entrada diaria en el punto de escaneo.</p>
+        
+        <div style="margin: 30px auto; border: 5px solid #2ecc71; padding: 15px; display: inline-block; border-radius: 8px; background-color: white;">
+            <!-- La imagen base64 generada por Python -->
+            <img src="{{ qr_base64 }}" alt="Código QR de Asistencia" style="width: 300px; height: 300px; display: block;">
+        </div>
+
+        <p style="font-size: 0.8em; color: #666; word-break: break-all;">
+            Contenido del QR (para referencia): <code>{{ checkin_url }}</code>
+        </p>
+        <p><a href="{{ url_for('index') }}" style="color: #3498db; text-decoration: none;">← Volver al Dashboard</a></p>
+    </div>
+{% endblock %}

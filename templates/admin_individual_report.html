@@ -1,0 +1,548 @@
+{% extends 'base.html' %}
+
+{% block title %}Reporte Individual de Asistencia{% endblock %}
+
+{% block content %}
+<div class="report_main_container">
+    <h2 class="report_header">🔍 Reporte Individual de Asistencia</h2>
+    <p class="report_link_wrapper"><a href="{{ url_for('admin_dashboard') }}" class="report_link">← Volver al Panel Admin</a></p>
+
+    <div class="search_container">
+        <form method="POST" action="{{ url_for('admin_individual_report') }}" class="search_form">
+            <input type="text" name="search_term" placeholder="Buscar por Nombre, Apellido o Teléfono..." required class="search_input">
+            <button type="submit" class="search_button">Buscar Usuario</button>
+        </form>
+    </div>
+
+    {% if user_id_to_display and user_data_for_calendar %}
+        {# 1. Muestra el Calendario si hay un ID y datos de usuario específicos #}
+        {% set user = user_data_for_calendar %}
+
+        <div class="stats_card">
+            <h4>Resumen General de Asistencia</h4>
+            <div class="stats_grid">
+                <div class="stat_item">
+                    <span class="stat_label">Asistencias Totales (Histórico)</span>
+                    <span class="stat_value stat_total">{{ total_attendance_count }}</span>
+                </div>
+                <div class="stat_item">
+                    <span class="stat_label">Asistencias en el Mes Actual</span>
+                    <span class="stat_value stat_monthly_present" id="monthly-present-count">0</span>
+                </div>
+                <div class="stat_item">
+                    <span class="stat_label">Ausencias en el Mes Actual (L-V Activos)</span>
+                    <span class="stat_value stat_monthly_absent" id="monthly-absent-count">0</span>
+                </div>
+                <div class="stat_item">
+                    <span class="stat_label">Días Hábiles Contados (Mes)</span>
+                    <span class="stat_value stat_monthly_total" id="monthly-total-count">0</span>
+                </div>
+            </div>
+        </div>
+        <div class="user_calendar_card">
+            <h3 class="user_name_display">
+                Calendario de Asistencia para: 
+                <strong id="user-display-name">{{ user.paternal_last_name }} {{ user.maternal_last_name }}, {{ user.first_name }}</strong>
+            </h3>
+            <p class="user_info_display">Teléfono: <strong>{{ user.phone_number if user.phone_number else 'N/A' }}</strong> | ID de Usuario: <strong id="user-display-id" data-user-id="{{ user.id }}">{{ user.id }}</strong></p>
+            
+            <div class="calendar_controls">
+                <button id="prev-month" class="report_nav_btn">‹ Mes Anterior</button>
+                <h3 id="month-year-display" class="report_month_year"></h3>
+                <button id="next-month" class="report_nav_btn">Mes Siguiente ›</button>
+            </div>
+
+            <div style="text-align: center; margin-top: 15px; margin-bottom: 20px;">
+                <a id="export-csv-button" href="#" class="export_btn" download>
+                    ⬇️ Exportar CSV del Mes Actual
+                </a>
+            </div>
+            
+            <div class="report_weekdays">
+                <span>Dom</span><span>Lun</span><span>Mar</span><span>Mié</span><span>Jue</span><span>Vie</span><span>Sáb</span>
+            </div>
+            <div id="calendar-days" class="calendar_days_grid">
+                </div>
+            
+            {# Leyenda ACTUALIZADA #}
+            <div class="legend_container">
+                <span class="legend_item legend_green">Asistencia (Verde - Finalizada)</span>
+                <span class="legend_item legend_active_reg">Registro Activo (Amarillo)</span>
+                <span class="legend_item legend_red">Ausencia (Rojo - L-V Activo)</span>
+                <span class="legend_item legend_gray">Sin Asistencia/Inactivo (Gris)</span>
+            </div>
+        </div>
+        
+    {% elif search_results is iterable and search_results is not string %}
+        {# 2. Muestra los Resultados de Búsqueda si se hizo un POST y hay resultados (o 0) #}
+        {% if search_results|length > 0 %}
+            <h3 class="search_results_title">Resultados de la Búsqueda:</h3>
+            <div class="search_results_table_wrapper">
+                <table class="report_table min-w-full">
+                    <thead>
+                        <tr class="report_table_header_row">
+                            <th class="report_table_cell">Nombre Completo</th>
+                            <th class="report_table_cell">Teléfono</th>
+                            <th class="report_table_cell">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in search_results %}
+                            <tr class="report_table_row">
+                                <td class="report_table_cell">{{ user.paternal_last_name }} {{ user.maternal_last_name }}, {{ user.first_name }}</td>
+                                <td class="report_table_cell">{{ user.phone_number if user.phone_number else 'N/A' }}</td>
+                                <td class="report_table_cell">
+                                    <a href="{{ url_for('admin_individual_report', user_id=user.id) }}" class="select_user_link">
+                                        Ver Calendario
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="report_no_data">No se encontraron usuarios que coincidan con la búsqueda.</p>
+        {% endif %}
+
+    {% else %}
+        {# 3. Mensaje Inicial por defecto #}
+        <p class="report_no_data">Utiliza el formulario superior para buscar y seleccionar un usuario para ver su historial.</p>
+    {% endif %}
+</div>
+
+<style>
+/* Estilos Específicos para este Reporte */
+.report_main_container { max-width: 900px; margin: 0 auto; padding: 20px; background-color: #f9f9f9; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.05); }
+.report_header { color: #333; border-bottom: 2px solid #ccc; padding-bottom: 10px; margin-bottom: 20px; text-align: center; }
+.report_link_wrapper { text-align: left; margin-bottom: 15px; }
+.report_link { color: #007bff; text-decoration: none; font-weight: bold; }
+.report_link:hover { text-decoration: underline; }
+.report_no_data { text-align: center; color: #555; padding: 20px; border: 1px solid #ddd; border-radius: 4px; background-color: #fff; }
+
+/* Formulario de Búsqueda */
+.search_container { margin-bottom: 30px; padding: 20px; background-color: #f8f8f8; border-radius: 8px; border: 1px solid #eee; }
+.search_form { display: flex; gap: 10px; }
+.search_input { flex-grow: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 1em; }
+.search_button { background-color: #2ecc71; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; font-size: 1em; }
+.search_button:hover { background-color: #27ae60; }
+
+/* Resultados de Búsqueda */
+.search_results_title { font-size: 1.2em; font-weight: bold; margin-bottom: 15px; color: #34495e; }
+.search_results_table_wrapper { overflow-x: auto; margin-bottom: 25px; }
+.report_table { width: 100%; border-collapse: collapse; }
+.report_table_header_row th { background-color: #34495e; color: white; padding: 10px; }
+.report_table_cell { border: 1px solid #ddd; padding: 10px; text-align: left; }
+.report_table_row:nth-child(even) { background-color: #f2f2f2; }
+.select_user_link { color: #3498db; text-decoration: underline; font-weight: bold; }
+.select_user_link:hover { color: #2980b9; }
+
+/* Tarjeta de Estadísticas */
+.stats_card { 
+    background-color: #fff; 
+    padding: 20px; 
+    border-radius: 8px; 
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1); 
+    margin-bottom: 25px;
+}
+.stats_card h4 {
+    margin-top: 0;
+    color: #34495e;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+    text-align: center;
+}
+.stats_grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 15px;
+    text-align: center;
+}
+.stat_item {
+    background-color: #ecf0f1;
+    padding: 15px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+}
+.stat_label {
+    display: block;
+    font-size: 0.9em;
+    color: #7f8c8d;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+.stat_value {
+    display: block;
+    font-size: 1.8em;
+    font-weight: bold;
+    color: #2c3e50;
+}
+.stat_total { color: #3498db; }
+.stat_monthly_present { color: #2ecc71; }
+.stat_monthly_absent { color: #e74c3c; }
+.stat_monthly_total { color: #f39c12; }
+/* Fin Estilos de Estadísticas */
+
+/* Estilo del botón de exportación */
+.export_btn {
+    display: inline-block;
+    padding: 10px 20px;
+    background-color: #38761d; /* Verde oscuro */
+    color: white;
+    text-decoration: none;
+    border-radius: 6px;
+    font-weight: bold;
+    transition: background-color 0.2s;
+}
+.export_btn:hover {
+    background-color: #274e13;
+}
+/* Fin Estilo del botón de exportación */
+
+/* Tarjeta del Calendario */
+.user_calendar_card { background-color: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-top: 25px; }
+.user_name_display, .user_info_display { text-align: center; margin-bottom: 15px; color: #34495e; }
+
+/* Controles de Calendario */
+.calendar_controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 0 10px; }
+.report_nav_btn { background-color: #3498db; color: white; padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; }
+.report_nav_btn:hover { background-color: #2980b9; }
+.report_month_year { color: #2c3e50; margin: 0; }
+
+.report_weekdays { 
+    display: grid; 
+    grid-template-columns: repeat(7, 1fr); 
+    text-align: center; 
+    font-weight: bold; 
+    color: #7f8c8d; 
+    margin-bottom: 5px; 
+    padding: 10px 0;
+}
+.calendar_days_grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; }
+
+/* 🎨 Estilos de los Días CORREGIDOS para diseño vertical 🎨 */
+.calendar_day { 
+    padding: 5px; 
+    border-radius: 4px; 
+    font-weight: bold; 
+    cursor: default;
+    height: 40px; /* Altura estándar para días sin hora */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 0.9em;
+}
+
+/* 🚨 NUEVA REGLA: Forzar el diseño vertical y más alto cuando hay HORA 🚨 */
+.calendar_day.has-time {
+    height: 60px; /* Más altura para el contenido */
+    flex-direction: column; /* APILAR elementos verticalmente (Día y Hora) */
+    justify-content: center;
+    align-items: center;
+}
+
+/* Estilos internos para días con hora */
+.calendar_day.has-time .day-number {
+    font-size: 1.1em;
+    line-height: 1.1; 
+    margin: 0;
+}
+
+.calendar_day.has-time .attendance-time {
+    font-size: 0.7em; 
+    font-weight: normal; 
+    line-height: 1;
+    margin-top: 3px; 
+    color: inherit; 
+    opacity: 0.9;
+}
+
+
+/* Estados del día */
+.calendar_day.inactive { 
+    color: #ccc; 
+    background-color: #fafafa; 
+    border: 1px solid #eee; 
+}
+.calendar_day.absent { 
+    background-color: #f8d7da; /* Rojo claro */
+    color: #721c24; 
+    border: 1px solid #f5c6cb;
+}
+.calendar_day.present { 
+    background-color: #d4edda; /* Verde claro */
+    color: #155724; 
+    border: 1px solid #c3e6cb;
+}
+.calendar_day.current_month {
+    /* Gris para días del mes actual sin registro (futuro o sin actividad) */
+    background-color: #ecf0f1; 
+    color: #333;
+    border: 1px solid #ddd;
+}
+.calendar_day.today {
+    box-shadow: 0 0 0 3px #f1c40f; /* Borde amarillo para el día de hoy */
+}
+
+/* Nuevo estilo para el día con registro ACTIVO (AMARILLO) */
+.calendar_day.active_registration {
+    background-color: #ffc107; /* Un tono estándar de amarillo/ámbar */
+    color: #343a40; /* Texto oscuro para contraste */
+}
+
+/* Leyenda */
+.legend_container { 
+    display: flex; 
+    justify-content: center; 
+    gap: 25px; 
+    margin-top: 25px;
+    padding-top: 15px;
+    border-top: 1px solid #eee;
+    font-size: 0.9em;
+}
+.legend_item {
+    padding-left: 20px;
+    position: relative;
+    color: #555;
+}
+.legend_item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+}
+.legend_green::before { background-color: #27ae60; }
+.legend_red::before { background-color: #c0392b; }
+.legend_gray::before { background-color: #95a5a6; }
+.legend_active_reg::before { background-color: #ffc107; }
+
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const userIdEl = document.getElementById('user-display-id');
+    if (!userIdEl) return; 
+
+    const userId = userIdEl.dataset.userId;
+    const calendarDaysEl = document.getElementById('calendar-days');
+    const monthYearDisplay = document.getElementById('month-year-display');
+    
+    const todayForComparison = new Date(); 
+    let currentMonth = todayForComparison.getMonth() + 1; // 1-12
+    let currentYear = todayForComparison.getFullYear();
+    let attendedDays = []; 
+    let attendedTimes = {}; // Almacena las horas asistidas
+    let systemActiveDays = []; 
+
+    // --- Funciones de Calendario ---
+
+    function getDaysInMonth(year, month) {
+        return new Date(year, month, 0).getDate();
+    }
+
+
+    function renderCalendar() {
+        calendarDaysEl.innerHTML = '';
+        
+        const monthNames = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+        monthYearDisplay.textContent = `${monthNames[currentMonth - 1]} ${currentYear}`;
+        
+        const daysInMonth = getDaysInMonth(currentYear, currentMonth);
+        const firstDayOfMonth = new Date(currentYear, currentMonth - 1, 1).getDay(); 
+        
+        // Formato para comparación: YYYY-MM-DD
+        const todayDateKey = `${todayForComparison.getFullYear()}-${String(todayForComparison.getMonth() + 1).padStart(2, '0')}-${String(todayForComparison.getDate()).padStart(2, '0')}`;
+        
+        let monthlyPresentCount = 0;
+        let monthlyAbsentCount = 0; 
+        
+        // Paso 1: Contar asistencias del mes actual
+        for (const dateKey of attendedDays) {
+            const [yearStr, monthStr] = dateKey.split('-');
+            const year = parseInt(yearStr);
+            const month = parseInt(monthStr);
+
+            if (year === currentYear && month === currentMonth) {
+                monthlyPresentCount++;
+            }
+        }
+        
+        // Días vacíos iniciales (offset)
+        for (let i = 0; i < firstDayOfMonth; i++) {
+            const emptyDay = document.createElement('div');
+            emptyDay.classList.add('calendar_day', 'inactive');
+            calendarDaysEl.appendChild(emptyDay);
+        }
+
+        // Días del 1 al N del mes
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dayElement = document.createElement('div');
+            const dateKey = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            
+            dayElement.classList.add('calendar_day');
+            
+            const checkDate = new Date(currentYear, currentMonth - 1, day);
+            
+            // Comparación de fecha (sin tiempo)
+            const checkDateNoTime = checkDate.setHours(0,0,0,0);
+            const todayNoTime = todayForComparison.setHours(0,0,0,0);
+            const isPastOrToday = checkDateNoTime <= todayNoTime;
+            
+            // Marcar el día de hoy
+            if (dateKey === todayDateKey) {
+                dayElement.classList.add('today');
+            }
+            
+            // --- CREACIÓN DEL CONTENIDO DEL DÍA (Día y Hora) ---
+            const dayNumber = document.createElement('div');
+            dayNumber.classList.add('day-number');
+            dayNumber.textContent = day;
+            dayElement.appendChild(dayNumber); // El número del día va primero
+
+            const isSystemActive = systemActiveDays.includes(dateKey);
+            const isUserAttended = attendedDays.includes(dateKey);
+            
+            if (isUserAttended) {
+                // Si asistió, agregamos la hora debajo del número del día
+                const timeString = attendedTimes[dateKey];
+                if (timeString) {
+                    // 🚨 CAMBIO JS: Aplicar la clase vertical cuando hay hora 🚨
+                    dayElement.classList.add('has-time'); 
+                    
+                    const timeDisplay = document.createElement('small');
+                    timeDisplay.classList.add('attendance-time');
+                    timeDisplay.textContent = timeString;
+                    dayElement.appendChild(timeDisplay); // La hora va debajo
+                }
+
+                // Lógica de color (Verde - Presente)
+                dayElement.classList.add('present'); 
+                
+                if (dateKey === todayDateKey) {
+                    dayElement.title = `VERDE: Registro propio COMPLETADO hoy a las ${timeString}. (${dateKey})`;
+                } else {
+                    dayElement.title = `VERDE: Asistencia registrada a las ${timeString}. (${dateKey})`;
+                }
+
+            } else if (isSystemActive) {
+                // Aquí el usuario NO asistió, pero el sistema sí estuvo activo (Día laborado para el sistema)
+                
+                if (isPastOrToday && dateKey !== todayDateKey) {
+                    // ROJO: Día pasado, el usuario no se registró -> FALTA
+                    dayElement.classList.add('absent'); 
+                    dayElement.title = `ROJO: INASISTENCIA. Sistema activo, usted NO se registró. (${dateKey}).`;
+                    monthlyAbsentCount++; 
+                } else if (dateKey === todayDateKey) {
+                    // AMARILLO (Pendiente de registro): El sistema está activo hoy, el usuario AÚN no se registra.
+                    dayElement.classList.add('active_registration'); 
+                    dayElement.title = `AMARILLO: El sistema está activo hoy, su registro está PENDIENTE. (${dateKey}).`;
+                } else {
+                    // Días futuros del sistema (Pendiente) -> GRIS (current_month)
+                    dayElement.classList.add('current_month');
+                    dayElement.title = `GRIS: Sistema activo (futuro). (${dateKey}).`;
+                }
+
+            } else {
+                // GRIS: Nadie asistió ese día. (Día no laborado)
+                dayElement.classList.add('inactive'); 
+                dayElement.title = `GRIS: Día no laborado. Nadie registró asistencia. (${dateKey}).`;
+            }
+            
+            calendarDaysEl.appendChild(dayElement);
+        }
+        
+        // 3. ACTUALIZAR LAS ESTADÍSTICAS DEL MES
+        document.getElementById('monthly-present-count').textContent = monthlyPresentCount;
+        document.getElementById('monthly-absent-count').textContent = monthlyAbsentCount; 
+        
+        let totalDaysToMonitor = 0;
+        
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dateKey = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            
+            if (systemActiveDays.includes(dateKey)) {
+                const checkDate = new Date(currentYear, currentMonth - 1, day);
+                const checkDateNoTime = checkDate.setHours(0,0,0,0);
+                const todayNoTime = todayForComparison.setHours(0,0,0,0);
+                const isPastOrToday = checkDateNoTime <= todayNoTime;
+                
+                if (isPastOrToday) {
+                    totalDaysToMonitor++;
+                }
+            }
+        }
+        
+        document.getElementById('monthly-total-count').textContent = totalDaysToMonitor;
+
+        // 4. Actualizar el enlace de exportación CSV
+        const exportButton = document.getElementById('export-csv-button');
+        const exportPath = `/admin/attendance/export/${userId}/${currentYear}/${currentMonth}`;
+        exportButton.href = exportPath;
+    }
+
+    // --- API Fetch ---
+
+    async function fetchAttendanceData(userId, year, month) {
+        // NOTA: Esta URL requiere que implementes la ruta en tu archivo Flask (app.py)
+        const url = `/api/attendance/user/${userId}/${year}/${month}`; 
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error(errorData.error);
+                // Limpiar contadores si la API falla
+                document.getElementById('monthly-present-count').textContent = 0;
+                document.getElementById('monthly-absent-count').textContent = 0;
+                document.getElementById('monthly-total-count').textContent = 0;
+                attendedDays = []; 
+                attendedTimes = {}; 
+                systemActiveDays = [];
+                renderCalendar();
+                return;
+            }
+            const data = await response.json();
+            attendedDays = data.attended_days;
+            attendedTimes = data.attended_times || {}; 
+            systemActiveDays = data.system_active_days || []; 
+            renderCalendar();
+        } catch (error) {
+            console.error('Error de conexión o parseo:', error);
+            // Limpiar contadores si falla la conexión
+            attendedDays = [];
+            attendedTimes = {};
+            systemActiveDays = [];
+            renderCalendar();
+        }
+    }
+
+
+    // --- Eventos y Inicialización ---
+
+    document.getElementById('prev-month').addEventListener('click', () => {
+        currentMonth--;
+        if (currentMonth < 1) {
+            currentMonth = 12;
+            currentYear--;
+        }
+        fetchAttendanceData(userId, currentYear, currentMonth);
+    });
+
+    document.getElementById('next-month').addEventListener('click', () => {
+        currentMonth++;
+        if (currentMonth > 12) {
+            currentMonth = 1;
+            currentYear++;
+        }
+        fetchAttendanceData(userId, currentYear, currentMonth);
+    });
+
+    // Inicialización
+    fetchAttendanceData(userId, currentYear, currentMonth);
+});
+</script>
+{% endblock %}

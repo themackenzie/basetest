@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>PRUEBA DE CARGA DE ESCÁNER QR</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: 'Inter', Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 50px;
+            background-color: #f0f4f8;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            width: 90%;
+            text-align: center;
+        }
+        h1 { color: #334155; margin-bottom: 20px; }
+        .result-panel {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        .fail { background-color: #fee2e2; color: #ef4444; border: 1px solid #f87171; }
+        .success { background-color: #d1fae5; color: #059669; border: 1px solid #34d399; }
+        .info { background-color: #dbeafe; color: #2563eb; border: 1px solid #60a5fa; }
+        #reader-placeholder {
+            width: 100%;
+            min-height: 250px;
+            border: 2px dashed #9ca3af;
+            border-radius: 5px;
+            margin-top: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #9ca3af;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛠 Prueba de Carga de Librería QR 🛠</h1>
+        <p class="info-text">
+            Esta página verifica si la librería del escáner (`html5-qrcode.minified.js`) se carga correctamente 
+            y si tu navegador permite el acceso a la cámara.
+        </p>
+
+        <div id="status-message" class="result-panel info">
+            Verificando la carga del script...
+        </div>
+
+        <div id="reader-placeholder">
+            Zona de Previsualización del Escáner
+        </div>
+    </div>
+
+    <!-- Script de la librería QR - Mismo CDN que el Canvas principal -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.minified.js"></script>
+
+    <script>
+        const statusMessage = document.getElementById('status-message');
+
+        function updateStatus(statusType, message) {
+            statusMessage.className = `result-panel ${statusType}`;
+            statusMessage.innerHTML = message;
+        }
+
+        // Función principal de prueba
+        function runTest() {
+            // 1. Verificar si la clase principal de la librería está definida
+            if (typeof Html5QrcodeScanner === 'undefined') {
+                updateStatus('fail', '❌ FALLO: La librería `html5-qrcode` no se cargó correctamente. Esto podría ser el error `ERR_BLOCKED_BY_ORB` o un problema de red.');
+                return;
+            }
+
+            updateStatus('success', '✅ ÉXITO: La librería `Html5QrcodeScanner` se cargó correctamente.');
+
+            // 2. Intentar inicializar el escáner para verificar la API de la cámara
+            const qrCodeRegionId = "reader-placeholder";
+            let testScanner = null;
+
+            try {
+                // Crear una instancia de prueba
+                testScanner = new Html5QrcodeScanner(
+                    qrCodeRegionId, 
+                    { 
+                        fps: 1, 
+                        qrbox: 50,
+                        supportedScanTypes: [Html5QrcodeSupportedFormats.QR_CODE]
+                    },
+                    /* verbose= */ false
+                );
+                
+                // Si la creación es exitosa, se intenta renderizar.
+                testScanner.render(
+                    (decodedText, decodedResult) => { 
+                        updateStatus('success', '✅ CÓDIGO ESCANEADO (PRUEBA): La cámara funciona y detectó un QR.');
+                        testScanner.pause();
+                    }, 
+                    (error) => {
+                        // Falla silenciosa esperada cuando no hay QR, o si hay un error de cámara
+                    }
+                );
+                
+                // 3. Verificar el acceso a la cámara de manera explícita (para mejor diagnóstico)
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    navigator.mediaDevices.getUserMedia({ video: true })
+                        .then(() => {
+                            updateStatus('success', '✅ ÉXITO: La librería se cargó y obtuvimos permiso para acceder a la cámara. El escáner está intentando iniciarse a continuación.');
+                        })
+                        .catch(err => {
+                            updateStatus('fail', `⚠️ ALERTA: La librería cargó, pero el acceso a la cámara falló: ${err.name}. Debes permitir el permiso de la cámara.`);
+                        });
+                } else {
+                    updateStatus('info', 'ℹ️ INFO: Tu navegador no soporta la API de cámara necesaria.');
+                }
+
+            } catch (e) {
+                updateStatus('fail', `❌ FALLO DE INICIALIZACIÓN: La librería cargó, pero hubo un error al iniciar el escáner: ${e.message}`);
+            }
+        }
+
+        // Inicia la prueba cuando la ventana haya cargado completamente
+        window.onload = runTest;
+    </script>
+</body>
+</html>

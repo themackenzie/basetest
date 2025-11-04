@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+
+{% block title %}Panel de Administración{% endblock %}
+
+{% block content %}
+    <div style="text-align: center; padding: 20px;">
+        <h2>Panel de Administración de Asistencias</h2>
+        <p>Selecciona una opción para gestionar o registrar la asistencia.</p>
+        
+        <div style="margin-top: 30px;">
+            <!-- Botón 1: Registrar Asistencia por QR -->
+            <a href="{{ url_for('admin_scanner') }}" style="display: inline-block; padding: 15px 30px; background-color: #28a745; color: white; text-decoration: none; border-radius: 8px; margin: 10px; font-size: 1.2em;">
+                📸 Registrar Asistencia por QR
+            </a>
+            
+            <!-- Botón 2: Reporte General de Asistencias -->
+            <a href="{{ url_for('admin_attendance_report') }}" style="display: inline-block; padding: 15px 30px; background-color: #007bff; color: white; text-decoration: none; border-radius: 8px; margin: 10px; font-size: 1.2em;">
+                📈 Ver Reporte General de Asistencias
+            </a>
+            
+            <!-- Botón 3: Reporte Individual de Asistencia (NUEVO) -->
+            <a href="{{ url_for('admin_individual_report') }}" style="display: inline-block; padding: 15px 30px; background-color: #ffc107; color: #343a40; text-decoration: none; border-radius: 8px; margin: 10px; font-size: 1.2em; font-weight: bold;">
+                📅 Reporte Individual de Asistencia
+            </a>
+        </div>
+    </div>
+{% endblock %}
