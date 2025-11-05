@@ -7,7 +7,7 @@ from io import BytesIO
 import csv
 from collections import defaultdict
 
-from flask import Flask, render_template, request, redirect, url_for, session, g, Response, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, g, Response, jsonify, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 
 # 🚨 CAMBIO CRÍTICO 1: Reemplazar MySQLdb con psycopg2
@@ -985,3 +985,4 @@ def logout():
 # --- Ejecución de la Aplicación ---
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0')
+
