@@ -92,21 +92,19 @@
             }
         }
 
-        // --- Lógica de Escaneo ---
+        // --- Lógica de Escaneo (sin cambios funcionales, solo pausa y reanudación) ---
         function onScanSuccess(decodedText, decodedResult) {
-            // Pausa el escáner
+            // Pausa el escáner para evitar múltiples lecturas
             if (html5QrcodeScanner) {
                  html5QrcodeScanner.pause(true); 
             }
-           
-
+            
             updateMessage('warning', `Código detectado. Procesando asistencia...`);
 
             // Realiza la solicitud al endpoint de check-in del servidor Flask
             fetch(decodedText, {
                 method: 'GET',
                 headers: {
-                    // Header recomendado para asegurar que el navegador acepte la respuesta HTML
                     'Accept': 'text/html' 
                 }
             })
@@ -117,7 +115,7 @@
                     return response.text();
                 })
                 .then(html => {
-                    // Procesar la respuesta HTML del servidor para extraer el mensaje de estado
+                    // Procesar la respuesta HTML del servidor
                     const parser = new DOMParser();
                     const doc = parser.parseFromString(html, 'text/html');
                     
@@ -140,63 +138,98 @@
                 .finally(() => {
                     // Después de un breve retraso, reanuda el escáner
                     setTimeout(() => {
-                         if (html5QrcodeScanner) {
-                            html5QrcodeScanner.resume(true); 
+                        if (html5QrcodeScanner) {
+                           html5QrcodeScanner.resume(true); 
                         }
                     }, 2000); 
                 });
         }
 
         function onScanFailure(error) {
-            // Se deja vacío
+            // Se deja vacío para evitar spam en la consola
         }
 
-        // --- Lógica de Inicialización de la Cámara ---
-        function startScanner() {
+        // --- Lógica de Inicialización de la Cámara (CORREGIDA) ---
+        async function startScanner() {
             // Revisar si estamos en un contexto seguro
             if (!window.isSecureContext && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
-                 updateMessage('error', '❌ ERROR: La cámara solo funciona bajo HTTPS o en localhost.');
-                 return; 
+                updateMessage('error', '❌ ERROR: La cámara solo funciona bajo HTTPS o en localhost.');
+                return; 
             }
             
-            // Comprobación final si la clase existe antes de intentar iniciar
-            if (typeof Html5QrcodeScanner === 'undefined') {
-                updateMessage('error', '❌ ERROR FATAL: La librería no se cargó. Esto es un bloqueo de red.');
+            // Comprobación final si la clase existe
+            if (typeof Html5Qrcode === 'undefined') {
+                updateMessage('error', '❌ ERROR FATAL: La librería no se cargó.');
                 return;
             }
 
-            updateMessage('warning', 'Inicializando escáner...');
+            updateMessage('warning', 'Buscando cámaras disponibles...');
 
+            let cameraConfig = null;
+
+            try {
+                // 1. OBTENER la lista de todas las cámaras
+                const devices = await Html5Qrcode.getCameras();
+                
+                if (devices && devices.length) {
+                    
+                    // 2. Buscar la cámara trasera (environment) de forma más robusta
+                    let rearCameraId = null;
+                    
+                    // Intentamos encontrar por etiqueta ('back', 'trasera', 'environment')
+                    const rearCamera = devices.find(device => 
+                        device.label.toLowerCase().includes("back") || 
+                        device.label.toLowerCase().includes("trasera") ||
+                        device.label.toLowerCase().includes("environment")
+                    );
+
+                    if (rearCamera) {
+                        // Encontramos una cámara trasera por su etiqueta
+                        rearCameraId = rearCamera.id;
+                        updateMessage('warning', `Cámara trasera detectada: ${rearCamera.label}`);
+                    } else {
+                        // Si no se puede distinguir, usamos la última (a menudo la trasera)
+                        rearCameraId = devices[devices.length - 1].id;
+                        updateMessage('warning', 'Usando la cámara por defecto (intento trasero).');
+                    }
+
+                    // 3. Configuración con el ID explícito
+                    // Esto es lo que fuerza al navegador a usar ese dispositivo
+                    cameraConfig = { deviceId: { exact: rearCameraId } };
+
+                } else {
+                    updateMessage('error', '❌ No se encontraron cámaras disponibles.');
+                    return;
+                }
+            } catch (err) {
+                // Si falla la promesa de getCameras (ej: permisos denegados), lo manejamos
+                if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+                    updateMessage('error', '❌ Permiso Denegado: Debes permitir el acceso a la cámara.');
+                } else {
+                    updateMessage('error', `❌ Error al listar cámaras: ${err.message}.`);
+                }
+                return;
+            }
+
+
+            // 4. Iniciar el escáner usando la configuración de ID explícita
             html5QrcodeScanner = new Html5QrcodeScanner(
                 qrCodeRegionId, 
                 { 
                     fps: 10, 
                     qrbox: {width: 250, height: 250},
-                    facingMode: "environment", 
+                    // **CLAVE DE LA CORRECCIÓN:** Usamos 'videoConstraints' con el deviceId exacto
+                    videoConstraints: cameraConfig, 
                     supportedScanTypes: [Html5QrcodeSupportedFormats.QR_CODE]
                 },
                 /* verbose= */ false
             );
             
             html5QrcodeScanner.render(onScanSuccess, onScanFailure);
-
-            // Intento explícito de obtener permisos de la cámara (para manejo de errores)
-             navigator.mediaDevices.getUserMedia({ video: true })
-                .catch(err => {
-                    if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-                        updateMessage('error', '❌ Permiso Denegado: Debes permitir el acceso a la cámara.');
-                    } else if (err.name === "NotFoundError") {
-                        updateMessage('error', '❌ Cámara no encontrada.');
-                    } else {
-                        updateMessage('error', `❌ Error desconocido al iniciar: ${err.name}.`);
-                    }
-                });
-            
         }
         
-        // 🌟 CORRECCIÓN FINAL: Se inicia la lógica tan pronto como el DOM esté listo.
+        // Iniciar la lógica de escaneo una vez que el DOM esté cargado
         document.addEventListener('DOMContentLoaded', function() {
-            // Un pequeño retraso para asegurar que el script de CDN se procese
             setTimeout(startScanner, 100); 
         });
 
