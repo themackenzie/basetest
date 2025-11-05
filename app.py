@@ -27,11 +27,11 @@ app = Flask(__name__)
 # =========================================================================
 # 🚨 CAMBIO CRÍTICO 2: Adaptar la configuración a PostgreSQL
 DB_CONFIG = {
-    'host': 'localhost',        # <-- ¡REEMPLAZA! Ejemplo: 'localhost'
-    'user': 'postgres',         # <-- ¡REEMPLAZA! Ejemplo: 'postgres'
-    'password': 'root',         # <-- ¡REEMPLAZA! Ejemplo: 'root'
-    'database': 'mapache_db',   # <-- ¡REEMPLAZA!
-    # Nota: psycopg2 usa 'password' en lugar de 'passwd' y 'database' en lugar de 'db'
+    'host': 'ep-old-pond-af37t6sb-pooler.c-2.us-west-2.aws.neon.tech',
+    'user': 'neondb_owner',
+    'password': 'npg_lvsqT6A1XZgk',         # <-- ¡REEMPLAZA! Ejemplo: 'root'
+    'database': 'neondb',
+    'sslmode': 'require'
 }
 # =========================================================================
 
