@@ -5,29 +5,33 @@ import base64
 import io
 from io import BytesIO
 import csv
-
-from flask import Flask, render_template, request, redirect, url_for, session, g, Response, jsonify 
-from werkzeug.security import generate_password_hash, check_password_hash
 from collections import defaultdict
 
-import MySQLdb as mdb
-import MySQLdb.cursors
+from flask import Flask, render_template, request, redirect, url_for, session, g, Response, jsonify
+from werkzeug.security import generate_password_hash, check_password_hash
+
+# 🚨 CAMBIO CRÍTICO 1: Reemplazar MySQLdb con psycopg2
+# import MySQLdb as mdb
+# import MySQLdb.cursors
+import psycopg2
+import psycopg2.extras # Para usar DictCursor
+
 import qrcode
 
 # --- Configuración de Flask ---
 app = Flask(__name__)
 
 # =========================================================================
-# *** CONFIGURACIÓN CRÍTICA DE MYSQL SIN ORM ***
+# *** CONFIGURACIÓN CRÍTICA DE POSTGRESQL SIN ORM ***
 # ⚠️ ALERTA: DEBES REEMPLAZAR TODOS ESTOS MARCADORES DE POSICIÓN ⚠️
 # =========================================================================
+# 🚨 CAMBIO CRÍTICO 2: Adaptar la configuración a PostgreSQL
 DB_CONFIG = {
-    'host': 'localhost',        # <-- ¡REEMPLAZA! Ejemplo: 'localhost'
-    'user': 'root',       # <-- ¡REEMPLAZA! Ejemplo: 'root'
-    'passwd': 'root', # <-- ¡REEMPLAZA! Ejemplo: ''
-    'db': 'mapache', # <-- ¡REEMPLAZA!
-    'charset': 'utf8mb4',
-    'cursorclass': MySQLdb.cursors.DictCursor
+    'host': 'ep-old-pond-af37t6sb-pooler.c-2.us-west-2.aws.neon.tech',
+    'user': 'neondb_owner',
+    'password': 'npg_lvsqT6A1XZgk',         # <-- ¡REEMPLAZA! Ejemplo: 'root'
+    'database': 'neondb',
+    'sslmode': 'require'
 }
 # =========================================================================
 
@@ -41,11 +45,11 @@ def add_security_headers(response):
     # Política de Seguridad de Contenido (CSP) para permitir scripts de CDN y localhost/cámara
     csp = (
         "default-src 'self';"
-        "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com;"  
+        "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com;"
         "style-src 'self' 'unsafe-inline';"
         "img-src 'self' data:;"
         # CORRECCIÓN DE CSP: Permitir conexión a localhost:5000 para el fetch del escáner
-        "connect-src 'self' http://localhost:5000 https://localhost:5000;"  
+        "connect-src 'self' http://localhost:5000 https://localhost:5000;"
         "media-src 'self' blob:;"
     )
     response.headers['Content-Security-Policy'] = csp
@@ -56,19 +60,20 @@ def add_security_headers(response):
 # --- Funciones de Conexión a la Base de Datos ---
 
 def get_db():
-    """Establece la conexión a MySQL y la almacena en el objeto 'g' de Flask."""
+    """Establece la conexión a PostgreSQL y la almacena en el objeto 'g' de Flask."""
     if 'db' not in g:
         try:
-            g.db = mdb.connect(**DB_CONFIG)
-            g.db.autocommit(False)
+            # 🚨 CAMBIO 3: Conexión con psycopg2
+            g.db = psycopg2.connect(**DB_CONFIG)
+            g.db.autocommit = False
         except Exception as e:
-            print(f"Error al conectar con MySQL: {e}")
+            print(f"Error al conectar con PostgreSQL: {e}")
             raise e
     return g.db
 
 @app.teardown_appcontext
 def close_db(e=None):
-    """Cierra la conexión a MySQL al finalizar la solicitud."""
+    """Cierra la conexión a PostgreSQL al finalizar la solicitud."""
     db = g.pop('db', None)
     if db is not None:
         db.close()
@@ -190,67 +195,54 @@ def init_db():
     db = None
     try:
         db = get_db()
-        cursor = db.cursor()
+        # 🚨 CAMBIO 4: Usar DictCursor de psycopg2 para cursores que devuelvan diccionarios
+        cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
         # 1. Crear Tabla de Usuarios (con nuevos campos)
+        # 🚨 CAMBIO 5: Sintaxis de PostgreSQL (SERIAL, UUID, TEXT en lugar de VARCHAR(80), etc.)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
-                id INT AUTO_INCREMENT PRIMARY KEY,
+                id SERIAL PRIMARY KEY,
                 username VARCHAR(80) UNIQUE NOT NULL,
                 password VARCHAR(255) NOT NULL,
-                is_admin BOOLEAN NOT NULL DEFAULT 0,
-                qr_code_uuid CHAR(36) UNIQUE NULL,  
+                is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+                qr_code_uuid UUID UNIQUE NULL, 
                 first_name VARCHAR(100) NULL,           
                 paternal_last_name VARCHAR(100) NULL,   
                 maternal_last_name VARCHAR(100) NULL,   
                 gender CHAR(1) NULL,                    
                 phone_number VARCHAR(20) NULL           
-            ) ENGINE=InnoDB;
+            );
         ''')
         
-        # ⚠️ Verificación de columnas (necesaria si la tabla ya existía)
-        required_columns = [
-            ('qr_code_uuid', 'CHAR(36) UNIQUE NULL'),  
-            ('first_name', 'VARCHAR(100) NULL'),
-            ('paternal_last_name', 'VARCHAR(100) NULL'),
-            ('maternal_last_name', 'VARCHAR(100) NULL'),
-            ('gender', 'CHAR(1) NULL'),
-            ('phone_number', 'VARCHAR(20) NULL')
-        ]
+        # ⚠️ Verificación de columnas (En PostgreSQL se hace diferente o se asume la creación inicial)
+        # Para simplificar la migración y evitar dependencias de INFORMATION_SCHEMA,
+        # confiamos en que CREATE TABLE IF NOT EXISTS maneja las columnas
+        # y eliminamos el bloque de ALTER TABLE de MySQL.
 
-        for col_name, col_def in required_columns:
-            try:
-                # Intenta seleccionar la columna
-                cursor.execute(f"SELECT {col_name} FROM users LIMIT 1")
-                cursor.fetchone()
-            except mdb.Error as e:
-                # Si la columna no existe (Error 1054)
-                if e.args[0] == 1054:
-                    print(f"Detectando columna '{col_name}' faltante. Añadiendo...")
-                    cursor.execute(f"ALTER TABLE users ADD COLUMN {col_name} {col_def};")
-                    db.commit()
-                    print(f"Columna '{col_name}' añadida con éxito.")
-                else:
-                    raise e
         
-        # 2. Crear Tabla de Asistencias (sin cambios)
+        # 2. Crear Tabla de Asistencias 
+        # 🚨 CAMBIO 6: Sintaxis de PostgreSQL (SERIAL, TIMESTAMP, REFERENCES)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS attendance (
-                id INT AUTO_INCREMENT PRIMARY KEY,
+                id SERIAL PRIMARY KEY,
                 user_id INT NOT NULL,
-                check_in_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+                check_in_time TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users (id)
-            ) ENGINE=InnoDB;
+            );
         ''')
 
-        # 3. Agregar Usuario Administrador Inicial (Actualizar si faltan campos)
+        # 3. Agregar Usuario Administrador Inicial 
         admin_password_hash = generate_password_hash('adminpass')
         
+        # 🚨 CAMBIO 7: Usar `WHERE username = %s` (psycopg2 usa %s)
         cursor.execute("SELECT id FROM users WHERE username = %s", ('admin',))
         admin_user = cursor.fetchone()  
 
         if admin_user is None:
             # Insertar admin con valores nulos/vacíos para los nuevos campos
+            # 🚨 CAMBIO 8: Usar UUID para el UUID. Generar uno si es necesario para el admin, aunque aquí se usa NULL.
+            # Se usa `NULL` para el UUID.
             cursor.execute(
                 """
                 INSERT INTO users (username, password, is_admin, qr_code_uuid, first_name, paternal_last_name, maternal_last_name, gender, phone_number) 
@@ -259,14 +251,14 @@ def init_db():
                 ('admin', admin_password_hash, True, 'Admin', 'User', 'System', 'O', '000000000')
             )
             db.commit()  
-            print("Usuario 'admin' creado con éxito en MySQL.")
+            print("Usuario 'admin' creado con éxito en PostgreSQL.")
         else:
             print("El usuario 'admin' ya existe.")
             
     except Exception as e:
         print(f"Error en init_db: {e}")
         if db is not None:
-             db.rollback() 
+            db.rollback() 
             
     finally:
         pass
@@ -309,7 +301,8 @@ def admin_attendance_report():
         return "Acceso denegado.", 403
 
     db = get_db()
-    cursor = db.cursor()
+    # 🚨 CAMBIO 9: Usar DictCursor para los fetchall
+    cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
     # Seleccionamos los campos de nombre, apellido y phone_number
     cursor.execute("""
@@ -330,16 +323,14 @@ def admin_attendance_report():
     for record in all_attendances:
         
         # Formatear el nombre completo: APELLIDO PATERNO, APELLIDO MATERNO, NOMBRES
+        # Nota: La estructura del diccionario es la misma con DictCursor
         full_name = f"{record['paternal_last_name']} {record['maternal_last_name']}, {record['first_name']}"
         
-        # Procesamiento de fecha y hora
-        time_data_str = str(record['check_in_time'])
+        # Procesamiento de fecha y hora (check_in_time es un objeto datetime en Python)
+        time_data_dt = record['check_in_time'] # Es un objeto datetime
         
-        if ' ' in time_data_str:
-            date_key, time_str = time_data_str.split(' ', 1)
-        else:
-            date_key = time_data_str
-            time_str = "00:00:00"
+        date_key = time_data_dt.strftime('%Y-%m-%d')
+        time_str = time_data_dt.strftime('%H:%M:%S')
 
         if not date_key:
             continue
@@ -363,11 +354,13 @@ def admin_individual_report():
         return "Acceso denegado.", 403
 
     db = get_db()
-    cursor = db.cursor()
+    # 🚨 CAMBIO 10: Usar DictCursor
+    cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
     search_results = None
     user_data_for_calendar = None 
     total_attendance_count = 0 # <-- NUEVA VARIABLE: Inicializada a 0
     
+    # 🚨 CAMBIO 11: Usar int() para forzar la conversión de user_id
     user_id_to_display = request.args.get('user_id') 
 
     if request.method == 'POST':
@@ -379,50 +372,56 @@ def admin_individual_report():
                 """
                 SELECT id, first_name, paternal_last_name, maternal_last_name, phone_number
                 FROM users
-                WHERE is_admin = 0 AND (
-                    first_name LIKE %s OR 
-                    paternal_last_name LIKE %s OR 
-                    maternal_last_name LIKE %s OR
+                WHERE is_admin = FALSE AND (
+                    first_name ILIKE %s OR  
+                    paternal_last_name ILIKE %s OR  
+                    maternal_last_name ILIKE %s OR
                     phone_number LIKE %s
                 )
                 ORDER BY paternal_last_name, maternal_last_name, first_name
                 """,
+                # 🚨 CAMBIO 12: Usar ILIKE (Case Insensitive LIKE) en PostgreSQL
                 (search_query, search_query, search_query, search_query)
             )
             search_results = cursor.fetchall()
 
     if user_id_to_display: 
-        # Si hay un user_id en la URL, buscamos a ese usuario específico para mostrar su calendario
-        cursor.execute(
-            """
-            SELECT id, first_name, paternal_last_name, maternal_last_name, phone_number
-            FROM users
-            WHERE id = %s
-            """,
-            (user_id_to_display,)
-        )
-        user_data_for_calendar = cursor.fetchone()
-        
-        # OBTENER EL CONTEO TOTAL DE ASISTENCIAS (Histórico)
-        if user_data_for_calendar:
+        try:
+            user_id = int(user_id_to_display)
+            # Si hay un user_id en la URL, buscamos a ese usuario específico para mostrar su calendario
             cursor.execute(
                 """
-                SELECT COUNT(*) AS total
-                FROM attendance
-                WHERE user_id = %s
+                SELECT id, first_name, paternal_last_name, maternal_last_name, phone_number
+                FROM users
+                WHERE id = %s
                 """,
-                (user_data_for_calendar['id'],)
+                (user_id,)
             )
-            # Guardamos el resultado en la nueva variable
-            total_attendance_count = cursor.fetchone()['total']
-        
+            user_data_for_calendar = cursor.fetchone()
+            
+            # OBTENER EL CONTEO TOTAL DE ASISTENCIAS (Histórico)
+            if user_data_for_calendar:
+                cursor.execute(
+                    """
+                    SELECT COUNT(*) AS total
+                    FROM attendance
+                    WHERE user_id = %s
+                    """,
+                    (user_data_for_calendar['id'],)
+                )
+                # Guardamos el resultado en la nueva variable
+                total_attendance_count = cursor.fetchone()['total']
+        except ValueError:
+            # Manejar el caso de que user_id_to_display no sea un entero
+            user_id_to_display = None
+            user_data_for_calendar = None
     
     # Se envían todas las variables a la plantilla
     return render_template('admin_individual_report.html', 
-                           search_results=search_results,
-                           user_id_to_display=user_id_to_display,
-                           user_data_for_calendar=user_data_for_calendar,
-                           total_attendance_count=total_attendance_count) # <-- NUEVO
+                            search_results=search_results,
+                            user_id_to_display=user_id_to_display,
+                            user_data_for_calendar=user_data_for_calendar,
+                            total_attendance_count=total_attendance_count) 
 
 
 @app.route('/api/attendance/user/<int:user_id>/<int:year>/<int:month>')
@@ -438,7 +437,8 @@ def get_individual_attendance(user_id, year, month):
     cursor = None
     try:
         db = get_db()
-        cursor = db.cursor(mdb.cursors.DictCursor)
+        # 🚨 CAMBIO 13: Usar DictCursor para los fetchall
+        cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
         start_date = datetime.date(year, month, 1)
         if month == 12:
@@ -462,7 +462,7 @@ def get_individual_attendance(user_id, year, month):
         # Almacenaremos la hora del primer check-in del día
         attended_records = {} 
         for record in cursor.fetchall():
-            check_in_dt = record['check_in_time']
+            check_in_dt = record['check_in_time'] # Objeto datetime de Python
             date_key = check_in_dt.strftime('%Y-%m-%d')
             time_str = check_in_dt.strftime('%H:%M') # 🚨 Formato de hora (sin segundos para la visualización)
             
@@ -471,15 +471,17 @@ def get_individual_attendance(user_id, year, month):
                 attended_records[date_key] = time_str
 
         # 2. Obtener días activos del SISTEMA (Global)
+        # 🚨 CAMBIO 14: Usar DATE() en PostgreSQL es check_in_time::DATE
         cursor.execute(
             """
-            SELECT DISTINCT DATE(check_in_time) as active_date
+            SELECT DISTINCT check_in_time::DATE as active_date
             FROM attendance
             WHERE check_in_time >= %s
               AND check_in_time < %s
             """,
             (start_date, end_date)
         )
+        # El resultado de active_date es un objeto date en Python, se necesita formatear
         system_active_days = [record['active_date'].strftime('%Y-%m-%d') for record in cursor.fetchall() if record.get('active_date')]
 
         # 3. Respuesta del API
@@ -497,12 +499,7 @@ def get_individual_attendance(user_id, year, month):
             cursor.close()
 
 
-
-
 # --- Rutas de Administración (Continuación) ---
-
-# --- Rutas de Administración (Continuación) ---
-# app.py (Reemplazar la ruta /admin/settings)
 
 @app.route('/admin/settings', methods=['GET', 'POST'])
 def admin_settings():
@@ -573,9 +570,6 @@ def admin_settings():
         flash('Error al cargar la información del administrador.', 'error')
         return redirect(url_for('admin_dashboard'))
 
-
-
-
 @app.route('/admin/attendance/export/<int:user_id>/<int:year>/<int:month>')
 def export_individual_attendance(user_id, year, month):
     """
@@ -590,7 +584,8 @@ def export_individual_attendance(user_id, year, month):
 
     try:
         db = get_db()
-        cursor = db.cursor(mdb.cursors.DictCursor)
+        # 🚨 CAMBIO 15: Usar DictCursor para los fetchall
+        cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
         # Definir current_day_date para evitar errores de ámbito
         current_day_date = datetime.date.today()
@@ -628,7 +623,7 @@ def export_individual_attendance(user_id, year, month):
         
         attended_records = {}
         for record in cursor.fetchall():
-            check_in_dt = record['check_in_time'] # Objeto datetime de MySQL
+            check_in_dt = record['check_in_time'] # Objeto datetime de Python
             date_key = check_in_dt.strftime('%Y-%m-%d')
             time_str = check_in_dt.strftime('%H:%M:%S')
             
@@ -640,9 +635,10 @@ def export_individual_attendance(user_id, year, month):
         attended_dates = set(attended_records.keys())
         
         # 4. Obtener días activos del SISTEMA (Consulta Global)
+        # 🚨 CAMBIO 16: Usar DATE() en PostgreSQL es check_in_time::DATE
         cursor.execute(
             """
-            SELECT DISTINCT DATE(check_in_time) as active_date
+            SELECT DISTINCT check_in_time::DATE as active_date
             FROM attendance
             WHERE check_in_time >= %s
               AND check_in_time < %s
@@ -667,7 +663,8 @@ def export_individual_attendance(user_id, year, month):
         writer.writerow(header_row)
 
         days_in_month = (end_date - start_date).days
-        day_names = ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo"]
+        # Corregir nombres de días de la semana (Lunes es 0 en Python)
+        day_names = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
         
         # 6. Filas de datos
         for day in range(1, days_in_month + 1):
@@ -679,6 +676,7 @@ def export_individual_attendance(user_id, year, month):
             
             is_user_attended = date_key in attended_dates
             is_system_active = date_key in system_active_days
+
             is_past_or_today = current_date <= current_day_date
             
             status = ""
@@ -757,11 +755,14 @@ def show_qr():
         return redirect(url_for('index'))
 
     db = get_db()
-    cursor = db.cursor()
+    # 🚨 CAMBIO 17: Usar DictCursor
+    cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
     
     cursor.execute("SELECT qr_code_uuid FROM users WHERE id = %s", (session.get('user_id'),))
     result = cursor.fetchone()
-    qr_uuid = result['qr_code_uuid']
+    # 🚨 CAMBIO 18: El UUID es un objeto UUID en Python, necesitamos convertirlo a string si no lo está.
+    qr_uuid_obj = result.get('qr_code_uuid')
+    qr_uuid = str(qr_uuid_obj) if qr_uuid_obj else None
 
     if not qr_uuid:
         return "Error: UUID no encontrado para el usuario.", 500
@@ -782,7 +783,8 @@ def check_in(qr_uuid):
     # Asegúrate de que datetime y get_db estén definidos/importados en tu app.py
     
     db = get_db()
-    cursor = db.cursor()
+    # 🚨 CAMBIO 19: Usar DictCursor
+    cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
     message = ""
     status = "success"
     full_name = None # Inicializamos full_name
@@ -797,7 +799,7 @@ def check_in(qr_uuid):
             paternal_last_name, 
             maternal_last_name 
         FROM users 
-        WHERE qr_code_uuid = %s AND is_admin = 0
+        WHERE qr_code_uuid = %s AND is_admin = FALSE
         """,  
         (qr_uuid,)
     )
@@ -826,10 +828,11 @@ def check_in(qr_uuid):
         # 2. Verificar si ya registró asistencia hoy
         today = datetime.date.today()
         
+        # 🚨 CAMBIO 20: Usar DATE() en PostgreSQL es check_in_time::DATE
         cursor.execute(
             """
             SELECT id FROM attendance 
-            WHERE user_id = %s AND DATE(check_in_time) = %s
+            WHERE user_id = %s AND check_in_time::DATE = %s
             """,  
             (user_id, today.strftime('%Y-%m-%d'))
         )
@@ -855,7 +858,6 @@ def check_in(qr_uuid):
                 status = "error"
 
     # 4. Llamar a la función que genera el HTML, AHORA enviando el full_name
-    # **Nota:** Debes asegurarte de que build_checkin_response acepte un tercer argumento.
     return build_checkin_response(message, status, full_name)
 
 # --- Rutas de Autenticación (Login/Register/Logout) ---
@@ -866,7 +868,8 @@ def login():
         username = request.form['username']
         password = request.form['password']
         db = get_db()
-        cursor = db.cursor()
+        # 🚨 CAMBIO 21: Usar DictCursor
+        cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
         error = None
 
         cursor.execute("SELECT id, password, is_admin, username FROM users WHERE username = %s", (username,))
@@ -906,6 +909,7 @@ def register():
         phone_number = request.form.get('phone_number', '').strip() # Capturar y limpiar
         
         db = get_db()
+        # 🚨 CAMBIO 22: Usar cursor simple para comandos de modificación
         cursor = db.cursor()
         error = None
 
