@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Configuración de Administrador</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; /* Alineamos arriba para mejor visualización */
+            min-height: 100vh;
+            margin: 0;
+            padding-top: 50px; /* Espacio superior */
+        }
+        .container {
+            max-width: 500px; 
+            width: 90%;
+            padding: 30px; 
+            border: 1px solid #ccc; 
+            border-radius: 12px; 
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15); 
+            background-color: #ffffff; /* Fondo blanco para el contenedor */
+        }
+        h2 {
+            text-align: center; 
+            color: #343a40; 
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #495057;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            box-sizing: border-box; /* Asegura que el padding no desborde el ancho */
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+        .form-group input:focus {
+            border-color: #007bff;
+            outline: none;
+        }
+        small {
+            display: block;
+            margin-top: 5px;
+            color: #6c757d;
+        }
+        .btn-submit {
+            width: 100%; 
+            padding: 12px; 
+            background-color: #007bff; 
+            color: white; 
+            border: none; 
+            border-radius: 6px; 
+            font-size: 1.1em; 
+            cursor: pointer; 
+            transition: background-color 0.3s ease;
+            margin-top: 10px;
+        }
+        .btn-submit:hover {
+            background-color: #0056b3;
+        }
+        .btn-back {
+            display: block;
+            text-align: center;
+            margin-top: 25px;
+            color: #6c757d;
+            text-decoration: none;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            transition: background-color 0.3s;
+        }
+        .btn-back:hover {
+            background-color: #e9ecef;
+            color: #495057;
+        }
+        /* Estilos para mensajes flash */
+        .flash-message {
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            text-align: center;
+            opacity: 0.95;
+        }
+        .flash-success { 
+            background-color: #d4edda; 
+            color: #155724; 
+            border: 1px solid #c3e6cb; 
+        }
+        .flash-error { 
+            background-color: #f8d7da; 
+            color: #721c24; 
+            border: 1px solid #f5c6cb; 
+        }
+        .flash-warning { 
+            background-color: #fff3cd; 
+            color: #856404; 
+            border: 1px solid #ffeeba; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2 style="text-align: center; color: #343a40; margin-bottom: 25px;">⚙️ Configuración de Cuenta</h2>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-message flash-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('admin_settings') }}">
+            <div class="form-group">
+                <label for="username">Nuevo Nombre de Usuario:</label>
+                <input type="text" id="username" name="username" 
+                       value="{{ current_username or '' }}" 
+                       required>
+                <small>Su nombre de usuario actual es: <b>{{ current_username }}</b></small>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Nueva Contraseña:</label>
+                <input type="password" id="password" name="password" 
+                       placeholder="Ingrese la nueva contraseña" 
+                       required>
+                <small>Debe ingresar una nueva contraseña (mínimo 6 caracteres).</small>
+            </div>
+            
+            <button type="submit" class="btn-submit">Guardar Cambios</button>
+        </form>
+
+        <a href="{{ url_for('admin_dashboard') }}" class="btn-back">Volver al Panel Admin</a>
+    </div>
+</body>
+</html>
