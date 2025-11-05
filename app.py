@@ -508,10 +508,11 @@ def admin_settings():
         flash('Acceso denegado. Debe iniciar sesión como administrador.', 'error')
         return redirect(url_for('login'))
 
-    admin_id = session.get('user_id') 
+    admin_id = session.get('user_id')  
     
     conn = get_db()
-    cur = conn.cursor()
+    # 🚨 CORRECCIÓN: Usar DictCursor aquí para poder acceder por nombre de columna (e.g., admin_data['username'])
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor) 
     
     if request.method == 'POST':
         # Obtenemos ambos campos
@@ -561,6 +562,7 @@ def admin_settings():
         cur.execute("SELECT username FROM users WHERE id = %s", (admin_id,))
         admin_data = cur.fetchone() 
         
+        # ¡Esta línea ahora funciona correctamente!
         current_username = admin_data['username'] if admin_data else ''
         
         return render_template('admin_settings.html', current_username=current_username)
@@ -569,6 +571,9 @@ def admin_settings():
         print(f'Error al cargar la configuración: {e}')
         flash('Error al cargar la información del administrador.', 'error')
         return redirect(url_for('admin_dashboard'))
+
+
+        
 
 @app.route('/admin/attendance/export/<int:user_id>/<int:year>/<int:month>')
 def export_individual_attendance(user_id, year, month):
