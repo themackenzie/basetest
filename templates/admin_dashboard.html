@@ -7,20 +7,21 @@
         <h2>Panel de Administración de Asistencias</h2>
         <p>Selecciona una opción para gestionar o registrar la asistencia.</p>
         
-        <div style="margin-top: 30px;">
-            <!-- Botón 1: Registrar Asistencia por QR -->
-            <a href="{{ url_for('admin_scanner') }}" style="display: inline-block; padding: 15px 30px; background-color: #28a745; color: white; text-decoration: none; border-radius: 8px; margin: 10px; font-size: 1.2em;">
+        <div style="margin-top: 30px; display: flex; flex-wrap: wrap; justify-content: center; gap: 20px;">
+            <a href="{{ url_for('admin_scanner') }}" style="display: inline-block; padding: 15px 30px; background-color: #28a745; color: white; text-decoration: none; border-radius: 8px; font-size: 1.2em; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
                 📸 Registrar Asistencia por QR
             </a>
             
-            <!-- Botón 2: Reporte General de Asistencias -->
-            <a href="{{ url_for('admin_attendance_report') }}" style="display: inline-block; padding: 15px 30px; background-color: #007bff; color: white; text-decoration: none; border-radius: 8px; margin: 10px; font-size: 1.2em;">
+            <a href="{{ url_for('admin_attendance_report') }}" style="display: inline-block; padding: 15px 30px; background-color: #007bff; color: white; text-decoration: none; border-radius: 8px; font-size: 1.2em; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
                 📈 Ver Reporte General de Asistencias
             </a>
             
-            <!-- Botón 3: Reporte Individual de Asistencia (NUEVO) -->
-            <a href="{{ url_for('admin_individual_report') }}" style="display: inline-block; padding: 15px 30px; background-color: #ffc107; color: #343a40; text-decoration: none; border-radius: 8px; margin: 10px; font-size: 1.2em; font-weight: bold;">
+            <a href="{{ url_for('admin_individual_report') }}" style="display: inline-block; padding: 15px 30px; background-color: #ffc107; color: #343a40; text-decoration: none; border-radius: 8px; font-size: 1.2em; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
                 📅 Reporte Individual de Asistencia
+            </a>
+            
+            <a href="{{ url_for('admin_settings') }}" style="display: inline-block; padding: 15px 30px; background-color: #6c757d; color: white; text-decoration: none; border-radius: 8px; font-size: 1.2em; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                ⚙️ Configuración de Cuenta
             </a>
         </div>
     </div>
